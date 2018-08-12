@@ -4,6 +4,8 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.database.Cursor;
+import android.database.sqlite.SQLiteDatabase;
 import android.location.Location;
 import android.net.Uri;
 import android.net.wifi.ScanResult;
@@ -23,7 +25,11 @@ import com.google.gson.Gson;
 import com.mapbox.geojson.Point;
 import com.mapbox.mapboxsdk.Mapbox;
 
+import com.mapbox.mapboxsdk.annotations.Icon;
+import com.mapbox.mapboxsdk.annotations.IconFactory;
 import com.mapbox.mapboxsdk.annotations.MarkerOptions;
+import com.mapbox.mapboxsdk.annotations.MarkerView;
+import com.mapbox.mapboxsdk.annotations.MarkerViewOptions;
 import com.mapbox.mapboxsdk.geometry.LatLng;
 import com.mapbox.mapboxsdk.maps.MapView;
 import com.mapbox.mapboxsdk.maps.MapboxMap;
@@ -39,6 +45,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
 
@@ -48,26 +55,26 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-//import com.mapbox.mapboxandroiddemo.R;
-//import com.mapbox.turf.TurfJoins; ???
 
-
-
-/**
-
- * Display an indoor map of a building with toggles to switch between floor levels
-
- */
 
 public class MainActivity extends AppCompatActivity {
 
-   // private GeoJsonSource indoorBuildingSource;
+    Cursor cursor = null;
+    Cursor cursorCoord = null;
+    Cursor cursorDest = null;
+    Graph graph = new Graph();
+
+
+    // private GeoJsonSource indoorBuildingSource;
     private List<Point> boundingBox;
     private List<List<Point>> boundingBoxList;
     private View levelButtons;
     private MapView mapView;
     private MapboxMap map;
     private MarkerOptions mMarker;
+    private MarkerOptions mMarkerUsr;
+    private MarkerViewOptions options;
+    private MarkerView marker_inter;
     private LatLng mLatLng;
     WifiManager wifi;
     private  Button startNavigation;
@@ -76,6 +83,9 @@ public class MainActivity extends AppCompatActivity {
     final String[] destinationMap = {""};
     List<ScanResult> results;
     int size = 0;
+    private Icon icon;
+    private Icon iconUsr;
+
     //private ArrayList<String> arraylist = new ArrayList<>();
     String ITEM_KEY = "key";
 
@@ -114,11 +124,108 @@ public class MainActivity extends AppCompatActivity {
 
         startNavigation.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
+                ArrayList<String> nodePathName = new ArrayList<>();
                getDestination_Route destination = new getDestination_Route();
                dest = findViewById(R.id.txtdestination);
+               destination.execute(dest.getText().toString()).toString();
+
+                String[] columns = {"nodeid","nodecoordinates","building"};
+                HashMap<String,Node> nodeArrayList = new HashMap<>();
 
 
-              destination.execute(dest.getText().toString()).toString();
+                DatabaseHelper myDbHelper = new DatabaseHelper(MainActivity.this);
+                try {
+                    myDbHelper.createDataBase();
+                } catch (IOException ioe) {
+                    throw new Error("Unable to create database");
+                }
+                myDbHelper.openDataBase();
+                cursor = myDbHelper.query("node", columns, null, null, null, null, null);
+
+
+                //Form the graph
+
+                for (int i = 0; i < cursor.getCount(); i++) {
+
+                    cursor.moveToPosition(i);
+                    //cursor.getString(1).toString();
+                    String nodeId = cursor.getString(0).toString();
+                    Node node = new Node(nodeId);
+                    if(!nodeId.equals("CSG000"))
+                        nodeArrayList.put(nodeId,node);
+
+                }
+                for (int i = 0; i < cursor.getCount(); i++) {
+                    cursor.moveToPosition(i);
+                    String nodeId = cursor.getString(0).toString();
+                    String connectedNodes = cursor.getString(1).toString();
+                    String[] connectedNodesArray = connectedNodes.split(",");
+                    for(String nodeid:connectedNodesArray){
+                        if (!nodeid.equals("")) {
+                            String splitNode = nodeid.split("-")[1];
+                            Node connectNode = nodeArrayList.get(splitNode);
+                            if( nodeArrayList.get(nodeId)!=null)
+                                nodeArrayList.get(nodeId).addDestination(connectNode, 5);
+                        }
+                    }
+
+
+                }
+
+                for(Node nodeInArray: nodeArrayList.values()){
+                    graph.addNode(nodeInArray);
+
+                }
+
+                graph = algorithm.calculateShortestPathFromSource(graph, nodeArrayList.get("CSG001"));
+                //cursorCoord = myDbHelper.query("coordinate", columnsCoordintate, null, null, null, null, null);
+                cursorDest = myDbHelper.rawQuery("SELECT * FROM coordinate WHERE location='"+dest.getText().toString()+"C'");
+                cursorDest.moveToFirst();
+                String destNode = cursorDest.getString(0).toString();
+
+
+                Iterator<Node> itr = graph.getNodes().iterator();
+                while(itr.hasNext())
+                {
+                    Node curNode = itr.next();
+                    String name = curNode.getName();
+                    if(name.equalsIgnoreCase(destNode))
+                    {
+                        Iterator<Node> itrPath = curNode.getShortestPath().iterator();
+                        while(itrPath.hasNext())
+                        {
+                            Node nodePath = itrPath.next();
+                            String nodesInPath = nodePath.getName().toString();
+                            nodePathName.add(nodesInPath);
+                        }
+
+
+                    }
+
+
+                }
+                String NodePath = "(";
+                Iterator<String> nameNodeInPath = nodePathName.iterator();
+                while(nameNodeInPath.hasNext())
+                {
+                    NodePath =NodePath+ "'"+ nameNodeInPath.next()+"'" +",";
+
+                }
+                NodePath = NodePath.substring(0,NodePath.length()-1);
+                NodePath = NodePath+")";
+                cursorCoord = myDbHelper.rawQuery("SELECT * FROM coordinate WHERE nodeid IN"+NodePath);
+
+                for (int i = 0; i < cursorCoord.getCount(); i++) {
+                    cursorCoord.moveToPosition(i);
+                    String point = cursorCoord.getString(1).toString();
+                    String[] latitude = point.split(",");
+                    addMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
+
+
+
+                }
+
+
 
 
 
@@ -129,9 +236,13 @@ public class MainActivity extends AppCompatActivity {
             public void onClick(View v) {
                 String routerDetails = getRouters();
 
+
                 //Begin from here
                 FetchPredictedLocation predictedLocation = new FetchPredictedLocation();
                 predictedLocation.execute(routerDetails);
+
+
+
 
 
 
@@ -205,6 +316,12 @@ public class MainActivity extends AppCompatActivity {
                 map.setStyleUrl("mapbox://styles/lvyaw1225/cji7dfzx01e8v2sqygbr4xrto");
             }
         });
+        IconFactory iconFactory = IconFactory.getInstance(this);
+        icon = iconFactory.fromResource(R.drawable.purple_marker);
+
+
+        iconUsr = iconFactory.fromResource(R.drawable.usr_icon);
+
 
        // arraylist = getRouters();
 
@@ -262,22 +379,50 @@ public class MainActivity extends AppCompatActivity {
             String[] position = destinationMap[0].split("\\|");
             double lat = Double.parseDouble(position[0]);
             double lon = Double.parseDouble(position[1]);
-            addMarker(lat, lon);
+            addDestination(lat, lon);
 
 
         }
 
     }
 
+    private void addDestination(double lat, double lon) {
 
-
-    private void addMarker(double lat, double lon) {
         mLatLng = new LatLng(lat,lon);
         mMarker = new MarkerOptions()
                 .position(mLatLng)
                 .title("Location")
                 .snippet("Welcome to you");
         map.addMarker(mMarker);
+    }
+
+    private void addMarker(double lat, double lon) {
+
+        mLatLng = new LatLng(lat,lon);
+        mMarker = new MarkerOptions()
+                .position(mLatLng)
+                .title("Location")
+                .setIcon(icon)
+                .snippet("Welcome to you");
+        map.addMarker(mMarker);
+    }
+    private void addCurrentMarker(double lat, double lon) {
+        mLatLng = new LatLng(lat,lon);
+       /* mMarkerUsr = new MarkerOptions()
+                .position(mLatLng)
+                .title("UserCurrent")
+                .setIcon(iconUsr)
+                .snippet("You are here");*/
+
+
+        marker_inter = map.addMarker(new MarkerViewOptions()
+                .position(mLatLng)
+                .title("currentLocation")
+                .snippet("You are here!")
+                .icon(iconUsr));
+
+       // map.addMarker(mMarkerUsr);
+
     }
 
 
@@ -374,7 +519,9 @@ public class MainActivity extends AppCompatActivity {
             String predictedLocation = "";
            // Uri uri = Uri.parse("http://127.0.0.1:5000/api").buildUpon().build();
             try {
-                URL url = new URL("http://10.0.2.2:5000/api");
+                URL url = new URL("http://ucdgps.ucd.ie");
+                //URL url = new URL("http://10.0.2.2:5000/");
+
                 //create and open request to google API
                 urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setRequestMethod("GET");
@@ -394,6 +541,13 @@ public class MainActivity extends AppCompatActivity {
 
                 InputStream inputStream = urlConnection.getInputStream();
                 predictedLocation = readStream(inputStream);
+                String[] latitude = predictedLocation.split(",");
+                addCurrentMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
+
+                //addCurrentMarker();
+
+
+
 
 
 
@@ -455,10 +609,10 @@ public class MainActivity extends AppCompatActivity {
             }
         } catch (Exception e) {
         }*/
-        String staticRouterDetails = "[{\"BSSID\":\"c0:7b:bc:f0:b4:b0\",\"SSID\":\"UCD Wireless\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":2462,\"hessid\":0,\"informationElements\":[{\"bytes\":[85,67,68,32,87,105,114,101,108,101,115,115],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[11],\"id\":3},{\"bytes\":[73,69,32,1,13,20],\"id\":7},{\"bytes\":[4,0,64,-115,91],\"id\":11},{\"bytes\":[0],\"id\":42},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[11,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[3,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,56,0,0,0,4,0,0,66],\"id\":133},{\"bytes\":[0,64,-106,0,16,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,0],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,71,1,0,0,76,90,-57,-114],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-50,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662292,\"timestamp\":761788447329,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[85,67,68,32,87,105,114,101,108,101,115,115,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":12}}},{\"BSSID\":\"c0:7b:bc:f0:b4:b1\",\"SSID\":\"eduroam\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[WPA2-EAP-CCMP][ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":2462,\"hessid\":0,\"informationElements\":[{\"bytes\":[101,100,117,114,111,97,109],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[11],\"id\":3},{\"bytes\":[73,69,32,1,13,20],\"id\":7},{\"bytes\":[4,0,64,-115,91],\"id\":11},{\"bytes\":[0],\"id\":42},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[1,0,0,15,-84,4,1,0,0,15,-84,4,1,0,0,15,-84,1,40,0],\"id\":48},{\"bytes\":[11,0,5,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[3,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,56,0,0,0,4,0,0,66],\"id\":133},{\"bytes\":[0,64,-106,0,16,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,1],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,71,1,0,0,76,-126,-58,-114],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-50,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662294,\"timestamp\":761788447217,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[101,100,117,114,111,97,109,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":7}}},{\"BSSID\":\"c0:7b:bc:f0:b4:be\",\"SSID\":\"eduroam\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[WPA2-EAP-CCMP][ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":5180,\"hessid\":0,\"informationElements\":[{\"bytes\":[101,100,117,114,111,97,109],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[73,69,32,36,8,23,100,5,23,-124,3,30],\"id\":7},{\"bytes\":[8,0,18,-115,91],\"id\":11},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[1,0,0,15,-84,4,1,0,0,15,-84,4,1,0,0,15,-84,1,40,0],\"id\":48},{\"bytes\":[36,8,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[1,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,56,0,0,0,8,0,0,65],\"id\":133},{\"bytes\":[0,64,-106,0,18,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,1],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,39,1,0,0,113,-51,43,-20],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-57,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662292,\"timestamp\":761788447417,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[101,100,117,114,111,97,109,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":7}}},{\"BSSID\":\"c0:7b:bc:f0:b4:bf\",\"SSID\":\"UCD Wireless\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":5180,\"hessid\":0,\"informationElements\":[{\"bytes\":[85,67,68,32,87,105,114,101,108,101,115,115],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[73,69,32,36,8,23,100,5,23,-124,3,30],\"id\":7},{\"bytes\":[8,0,18,-115,91],\"id\":11},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[36,8,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[1,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,56,0,0,0,8,0,0,65],\"id\":133},{\"bytes\":[0,64,-106,0,18,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,0],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,39,1,0,0,113,-91,44,-20],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-57,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662293,\"timestamp\":761788447376,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[85,67,68,32,87,105,114,101,108,101,115,115,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":12}}},{\"BSSID\":\"e6:6a:6a:65:1a:51\",\"SSID\":\"DIRECT-ZeDESKTOP-7H8N5QTmsHw\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[WPA2-PSK-CCMP][ESS][WPS]\",\"centerFreq0\":5190,\"centerFreq1\":0,\"channelWidth\":1,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":5180,\"hessid\":0,\"informationElements\":[{\"bytes\":[68,73,82,69,67,84,45,90,101,68,69,83,75,84,79,80,45,55,72,56,78,53,81,84,109,115,72,119],\"id\":0},{\"bytes\":[-116,18,-104,36,-80,72,96,108],\"id\":1},{\"bytes\":[36],\"id\":3},{\"bytes\":[1,0,0,15,-84,4,1,0,0,15,-84,4,1,0,0,15,-84,2,0,0],\"id\":48},{\"bytes\":[-17,9,27,-1,-1,0,0,0,0,0,0,0,0,0,0,-128,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[36,5,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[20,0,10,0,-56,0,-56,0,20,0,5,0,25,0],\"id\":74},{\"bytes\":[5,0,0,0,0,0,0,64],\"id\":127},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,3,127,1,1,0,0,-1,127],\"id\":221},{\"bytes\":[0,80,-14,4,16,74,0,1,16,16,68,0,1,2,16,59,0,1,0,16,71,0,16,-13,13,122,-67,3,-40,67,-67,-75,89,20,53,100,-118,23,-68,16,33,0,9,77,105,99,114,111,115,111,102,116,16,35,0,13,73,110,115,112,105,114,111,110,32,53,51,55,57,16,36,0,10,49,48,46,48,46,49,55,49,51,52,16,66,0,1,48,16,84,0,8,0,7,0,80,-14,0,0,0,16,17,0,3,84,101,106,16,8,0,2,0,8,16,73,0,6,0,55,42,0,1,32,16,73,0,23,0,1,55,16,6,0,16,-32,-2,-6,81,-118,86,79,36,-105,-66,26,-111,-68,88,115,-33,16,73,0,15,0,1,55,32,1,0,1,5,32,2,0,3,84,101,106],\"id\":221},{\"bytes\":[80,111,-102,10,0,0,6,0,17,28,68,0,6],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,39,1,0,0,-15,103,87,120],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-65,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662295,\"timestamp\":761788447459,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[68,73,82,69,67,84,45,90,101,68,69,83,75,84,79,80,45,55,72,56,78,53,81,84,109,115,72,119,0,0,0,0],\"count\":28}}},{\"BSSID\":\"60:38:e0:bd:89:31\",\"SSID\":\"\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[WPA2-PSK-CCMP][ESS]\",\"centerFreq0\":2422,\"centerFreq1\":0,\"channelWidth\":1,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":2412,\"hessid\":0,\"informationElements\":[{\"bytes\":[],\"id\":0},{\"bytes\":[-126,-124,-117,-106,12,18,24,36],\"id\":1},{\"bytes\":[1],\"id\":3},{\"bytes\":[0,3,0,0],\"id\":5},{\"bytes\":[0],\"id\":42},{\"bytes\":[48,72,96,108],\"id\":50},{\"bytes\":[1,0,0,15,-84,4,1,0,0,15,-84,4,1,0,0,15,-84,2,0,0],\"id\":48},{\"bytes\":[111,8,23,-1,-1,-1,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,31,-1,7,24,0],\"id\":45},{\"bytes\":[1,5,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[11,36,40,44,48,52,56,60,64,100,104,108,112,116,120,124,-128,-124,-120,-116],\"id\":51},{\"bytes\":[20,0,10,0,-76,0,-56,0,20,0,5,0,25,0],\"id\":74},{\"bytes\":[1,0,0,0,0,0,0,0],\"id\":127},{\"bytes\":[50,121,-117,51,-22,-1,0,0,-22,-1,0,0],\"id\":191},{\"bytes\":[0,0,0,-64,-1],\"id\":192},{\"bytes\":[0,80,67,3,0,0],\"id\":221},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,-103,1,0,0,69,-44,-87,-20],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-74,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662295,\"timestamp\":761788447498,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":0}}},{\"BSSID\":\"c0:7b:bc:36:ec:d1\",\"SSID\":\"eduroam\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[WPA2-EAP-CCMP][ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":2412,\"hessid\":0,\"informationElements\":[{\"bytes\":[101,100,117,114,111,97,109],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[1],\"id\":3},{\"bytes\":[73,69,32,1,13,20],\"id\":7},{\"bytes\":[1,0,33,-115,91],\"id\":11},{\"bytes\":[0],\"id\":42},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[1,0,0,15,-84,4,1,0,0,15,-84,4,1,0,0,15,-84,1,40,0],\"id\":48},{\"bytes\":[1,8,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[2,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,55,0,0,0,1,0,0,66],\"id\":133},{\"bytes\":[0,64,-106,0,16,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,1],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,-80,1,0,0,-14,-122,-94,39],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-76,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662293,\"timestamp\":761788447533,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[101,100,117,114,111,97,109,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":7}}},{\"BSSID\":\"c0:7b:bc:36:ec:d0\",\"SSID\":\"UCD Wireless\",\"anqpDomainId\":0,\"blackListTimestamp\":0,\"capabilities\":\"[ESS]\",\"centerFreq0\":0,\"centerFreq1\":0,\"channelWidth\":0,\"distanceCm\":-1,\"distanceSdCm\":-1,\"flags\":0,\"frequency\":2412,\"hessid\":0,\"informationElements\":[{\"bytes\":[85,67,68,32,87,105,114,101,108,101,115,115],\"id\":0},{\"bytes\":[24,-92,48,72,96,108],\"id\":1},{\"bytes\":[1],\"id\":3},{\"bytes\":[73,69,32,1,13,20],\"id\":7},{\"bytes\":[1,0,33,-115,91],\"id\":11},{\"bytes\":[0],\"id\":42},{\"bytes\":[-84,17,27,-1,-1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":45},{\"bytes\":[1,8,4,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"id\":61},{\"bytes\":[0,16,0,0,0,64],\"id\":127},{\"bytes\":[2,0,-113,0,15,0,-1,3,89,0,108,119,98,115,45,99,115,99,105,45,48,48,55,0,0,0,1,0,0,66],\"id\":133},{\"bytes\":[0,64,-106,0,16,0],\"id\":150},{\"bytes\":[0,80,-14,2,1,1,-128,0,3,-92,0,0,39,-92,0,0,66,67,94,0,98,50,47,0],\"id\":221},{\"bytes\":[0,64,-106,1,1,4],\"id\":221},{\"bytes\":[0,64,-106,3,5],\"id\":221},{\"bytes\":[0,64,-106,11,9],\"id\":221},{\"bytes\":[0,64,-106,20,0],\"id\":221},{\"bytes\":[0,-96,-58,0,1,0,0,-80,1,0,0,-14,94,-93,39],\"id\":221}],\"is80211McRTTResponder\":false,\"level\":-77,\"numConnection\":0,\"numIpConfigFailures\":0,\"numUsage\":0,\"operatorFriendlyName\":\"\",\"seen\":1532017662294,\"timestamp\":761788447569,\"untrusted\":false,\"venueName\":\"\",\"wifiSsid\":{\"octets\":{\"buf\":[85,67,68,32,87,105,114,101,108,101,115,115,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],\"count\":12}}}]";
 
 
-        return staticRouterDetails;
+
+        return jsonRouter;
     }
 
 
