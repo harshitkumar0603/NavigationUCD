@@ -27,6 +27,7 @@ import com.mapbox.mapboxsdk.Mapbox;
 
 import com.mapbox.mapboxsdk.annotations.Icon;
 import com.mapbox.mapboxsdk.annotations.IconFactory;
+import com.mapbox.mapboxsdk.annotations.Marker;
 import com.mapbox.mapboxsdk.annotations.MarkerOptions;
 import com.mapbox.mapboxsdk.annotations.MarkerView;
 import com.mapbox.mapboxsdk.annotations.MarkerViewOptions;
@@ -85,6 +86,7 @@ public class MainActivity extends AppCompatActivity {
     int size = 0;
     private Icon icon;
     private Icon iconUsr;
+    public int run =0;
 
     //private ArrayList<String> arraylist = new ArrayList<>();
     String ITEM_KEY = "key";
@@ -151,8 +153,9 @@ public class MainActivity extends AppCompatActivity {
                     //cursor.getString(1).toString();
                     String nodeId = cursor.getString(0).toString();
                     Node node = new Node(nodeId);
-                    if(!nodeId.equals("CSG000"))
-                        nodeArrayList.put(nodeId,node);
+                    nodeArrayList.put(nodeId,node);
+                    //if(!nodeId.equals("CSG000"))
+                      //  nodeArrayList.put(nodeId,node);
 
                 }
                 for (int i = 0; i < cursor.getCount(); i++) {
@@ -235,16 +238,15 @@ public class MainActivity extends AppCompatActivity {
         btnGetLocation.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 String routerDetails = getRouters();
+               // map.removeMarker(mMarkerUsr);
+
 
 
                 //Begin from here
                 FetchPredictedLocation predictedLocation = new FetchPredictedLocation();
                 predictedLocation.execute(routerDetails);
-
-
-
-
-
+               // predictedLocation.execute(routerDetails);
+               // predictedLocation.execute(routerDetails);
 
             }
         });
@@ -318,12 +320,10 @@ public class MainActivity extends AppCompatActivity {
         });
         IconFactory iconFactory = IconFactory.getInstance(this);
         icon = iconFactory.fromResource(R.drawable.purple_marker);
-
-
         iconUsr = iconFactory.fromResource(R.drawable.usr_icon);
 
 
-       // arraylist = getRouters();
+
 
 
     }
@@ -407,21 +407,29 @@ public class MainActivity extends AppCompatActivity {
         map.addMarker(mMarker);
     }
     private void addCurrentMarker(double lat, double lon) {
-        mLatLng = new LatLng(lat,lon);
-       /* mMarkerUsr = new MarkerOptions()
+        mLatLng = new LatLng(lat, lon);
+            //map.removeMarker(marker_inter);
+        mMarker = new MarkerOptions()
                 .position(mLatLng)
-                .title("UserCurrent")
+                .title("Location")
                 .setIcon(iconUsr)
-                .snippet("You are here");*/
+                .snippet("Welcome to you");
+
+       // map.addMarker(mMarker);
+
+       // Marker updateMarker = new Marker(mMarker);
 
 
-        marker_inter = map.addMarker(new MarkerViewOptions()
+        /*marker_inter = map.addMarker(new MarkerViewOptions()
                 .position(mLatLng)
                 .title("currentLocation")
                 .snippet("You are here!")
-                .icon(iconUsr));
+                .icon(iconUsr));*/
 
-       // map.addMarker(mMarkerUsr);
+            map.addMarker(mMarker);
+
+            //map.removeMarker(mMarker.getMarker());
+            map.updateMarker(mMarker.getMarker());
 
     }
 
@@ -513,11 +521,8 @@ public class MainActivity extends AppCompatActivity {
             BufferedReader reader = null;
             DataOutputStream writer;
             String WifiJson = "{\"ID\":\"test\",\"Email\":\"test@gmail.com\",\"Pwd\":\"test\"}";
-
-
-
             String predictedLocation = "";
-           // Uri uri = Uri.parse("http://127.0.0.1:5000/api").buildUpon().build();
+
             try {
                 URL url = new URL("http://ucdgps.ucd.ie");
                 //URL url = new URL("http://10.0.2.2:5000/");
@@ -543,14 +548,6 @@ public class MainActivity extends AppCompatActivity {
                 predictedLocation = readStream(inputStream);
                 String[] latitude = predictedLocation.split(",");
                 addCurrentMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
-
-                //addCurrentMarker();
-
-
-
-
-
-
 
 
             } catch (IOException e) {
@@ -597,20 +594,6 @@ public class MainActivity extends AppCompatActivity {
         String routerDetails;
         //JSONArray jsonArray = new JSONArray(results);
         String jsonRouter = new Gson().toJson(results);
-       /* try {
-            size = size - 1;
-            while (size >= 0) {
-
-               routerDetails = results.get(size).BSSID;
-
-               // arraylist.add(item);
-                size--;
-
-            }
-        } catch (Exception e) {
-        }*/
-
-
 
         return jsonRouter;
     }
