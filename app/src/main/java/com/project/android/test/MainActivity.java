@@ -520,14 +520,14 @@ public class MainActivity extends AppCompatActivity {
             HttpURLConnection urlConnection = null;
             BufferedReader reader = null;
             DataOutputStream writer;
-            String WifiJson = "{\"ID\":\"test\",\"Email\":\"test@gmail.com\",\"Pwd\":\"test\"}";
+
             String predictedLocation = "";
 
             try {
                 URL url = new URL("http://ucdgps.ucd.ie");
                 //URL url = new URL("http://10.0.2.2:5000/");
 
-                //create and open request to google API
+
                 urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setRequestMethod("GET");
                 urlConnection.setRequestProperty("Content-Type", "application/json");
