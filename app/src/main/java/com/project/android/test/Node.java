@@ -5,6 +5,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 
+//Class for the node i.e the points inside the building with geo-codes
 public class Node {
 
     private String name;

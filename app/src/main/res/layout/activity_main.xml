@@ -45,6 +45,7 @@
                 android:layout_gravity="center_horizontal"
                 android:background="?android:attr/selectableItemBackground"
                 android:text="Get my Location" />
+
         </LinearLayout>
     </com.mapbox.mapboxsdk.maps.MapView>
 

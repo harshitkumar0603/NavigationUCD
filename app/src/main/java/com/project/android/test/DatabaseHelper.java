@@ -14,6 +14,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 
 
+//Class to handle all the SQLlite database operations
 public class DatabaseHelper extends SQLiteOpenHelper {
 
     String DB_PATH = null;
@@ -29,7 +30,7 @@ public class DatabaseHelper extends SQLiteOpenHelper {
         Log.e("Path 1", DB_PATH);
     }
 
-
+    // Creating the database if it doesn't exist
     public void createDataBase() throws IOException {
         //copyDataBase();
         boolean dbExist = checkDataBase();

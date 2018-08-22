@@ -5,7 +5,9 @@ import java.util.LinkedList;
 import java.util.Map;
 import java.util.Set;
 
+//Class for The Dijkstra's algorithm
 public class algorithm {
+    //Algo to find the shortest path from source to destination
     public static Graph calculateShortestPathFromSource(Graph graph, Node source) {
         source.setDistance(0);
 

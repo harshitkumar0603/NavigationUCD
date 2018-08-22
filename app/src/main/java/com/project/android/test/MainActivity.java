@@ -64,9 +64,6 @@ public class MainActivity extends AppCompatActivity {
     Cursor cursorCoord = null;
     Cursor cursorDest = null;
     Graph graph = new Graph();
-
-
-    // private GeoJsonSource indoorBuildingSource;
     private List<Point> boundingBox;
     private List<List<Point>> boundingBoxList;
     private View levelButtons;
@@ -87,23 +84,19 @@ public class MainActivity extends AppCompatActivity {
     private Icon icon;
     private Icon iconUsr;
     public int run =0;
-
-    //private ArrayList<String> arraylist = new ArrayList<>();
     String ITEM_KEY = "key";
 
     @Override
     protected void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-
-
         // Mapbox access token is configured here. This needs to be called either in your application
         // object or in the same activity which contains the mapview.
         Mapbox.getInstance(this, "pk.eyJ1IjoibHZ5YXcxMjI1IiwiYSI6ImNqaTdkZWFtYzA5YXYza3F1ZnJ3cXdxaWwifQ.lNkrhdsRg3l98fr1dXRsUw");
         // This contains the MapView in XML and needs to be called after the access token is configured.
         setContentView(R.layout.activity_main);
+        //Initializing map
         mapView = findViewById(R.id.mapView);
         mapView.onCreate(savedInstanceState);
-
         startNavigation = findViewById(R.id.start_navigation);
         btnGetLocation = findViewById(R.id.get_location);
         wifi = (WifiManager) getApplicationContext().getSystemService(Context.WIFI_SERVICE);
@@ -117,46 +110,35 @@ public class MainActivity extends AppCompatActivity {
             @Override
             public void onReceive(Context c, Intent intent)
             {
-
                 results = wifi.getScanResults();
                 size = results.size();
             }
         }, new IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION));
 
-
+        //Getting the route, Creating the graph and setting the flags and destination
         startNavigation.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 ArrayList<String> nodePathName = new ArrayList<>();
-               getDestination_Route destination = new getDestination_Route();
-               dest = findViewById(R.id.txtdestination);
-               destination.execute(dest.getText().toString()).toString();
-
+                getDestination_Route destination = new getDestination_Route();
+                dest = findViewById(R.id.txtdestination);
+                destination.execute(dest.getText().toString()).toString();
                 String[] columns = {"nodeid","nodecoordinates","building"};
                 HashMap<String,Node> nodeArrayList = new HashMap<>();
-
-
                 DatabaseHelper myDbHelper = new DatabaseHelper(MainActivity.this);
                 try {
+                    //Creating the database if it doesn't exist
                     myDbHelper.createDataBase();
                 } catch (IOException ioe) {
                     throw new Error("Unable to create database");
                 }
                 myDbHelper.openDataBase();
                 cursor = myDbHelper.query("node", columns, null, null, null, null, null);
-
-
-                //Form the graph
-
+                //Form the graph from the nodes on the database
                 for (int i = 0; i < cursor.getCount(); i++) {
-
                     cursor.moveToPosition(i);
-                    //cursor.getString(1).toString();
                     String nodeId = cursor.getString(0).toString();
                     Node node = new Node(nodeId);
                     nodeArrayList.put(nodeId,node);
-                    //if(!nodeId.equals("CSG000"))
-                      //  nodeArrayList.put(nodeId,node);
-
                 }
                 for (int i = 0; i < cursor.getCount(); i++) {
                     cursor.moveToPosition(i);
@@ -171,22 +153,15 @@ public class MainActivity extends AppCompatActivity {
                                 nodeArrayList.get(nodeId).addDestination(connectNode, 5);
                         }
                     }
-
-
                 }
-
                 for(Node nodeInArray: nodeArrayList.values()){
                     graph.addNode(nodeInArray);
-
-                }
-
+                    }
+                //Calling the Dijkstras function to calculate the shortest path
                 graph = algorithm.calculateShortestPathFromSource(graph, nodeArrayList.get("CSG001"));
-                //cursorCoord = myDbHelper.query("coordinate", columnsCoordintate, null, null, null, null, null);
                 cursorDest = myDbHelper.rawQuery("SELECT * FROM coordinate WHERE location='"+dest.getText().toString()+"C'");
                 cursorDest.moveToFirst();
                 String destNode = cursorDest.getString(0).toString();
-
-
                 Iterator<Node> itr = graph.getNodes().iterator();
                 while(itr.hasNext())
                 {
@@ -201,11 +176,7 @@ public class MainActivity extends AppCompatActivity {
                             String nodesInPath = nodePath.getName().toString();
                             nodePathName.add(nodesInPath);
                         }
-
-
                     }
-
-
                 }
                 String NodePath = "(";
                 Iterator<String> nameNodeInPath = nodePathName.iterator();
@@ -216,43 +187,27 @@ public class MainActivity extends AppCompatActivity {
                 }
                 NodePath = NodePath.substring(0,NodePath.length()-1);
                 NodePath = NodePath+")";
+                //selecting all the nodes in the route to add the flags
                 cursorCoord = myDbHelper.rawQuery("SELECT * FROM coordinate WHERE nodeid IN"+NodePath);
-
                 for (int i = 0; i < cursorCoord.getCount(); i++) {
                     cursorCoord.moveToPosition(i);
                     String point = cursorCoord.getString(1).toString();
                     String[] latitude = point.split(",");
                     addMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
-
-
-
                 }
-
-
-
-
-
             }
         });
-
+        //Setting up the get my location button listener to call the classifier to predict the user's location
         btnGetLocation.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 String routerDetails = getRouters();
-               // map.removeMarker(mMarkerUsr);
-
-
-
-                //Begin from here
                 FetchPredictedLocation predictedLocation = new FetchPredictedLocation();
                 predictedLocation.execute(routerDetails);
-               // predictedLocation.execute(routerDetails);
-               // predictedLocation.execute(routerDetails);
-
             }
         });
 
 
-
+        //Initializing the map position and the boundaries
         mapView.getMapAsync(new OnMapReadyCallback() {
 
             @Override
@@ -264,7 +219,6 @@ public class MainActivity extends AppCompatActivity {
                 boundingBox.add(Point.fromLngLat(53.309460, -6.22327));
                 boundingBox.add(Point.fromLngLat(53.309150, -6.22327));
                 boundingBox.add(Point.fromLngLat(53.309150, -6.22470));
-
                 boundingBoxList = new ArrayList<>();
                 boundingBoxList.add(boundingBox);
                 mapboxMap.addOnCameraMoveListener(new MapboxMap.OnCameraMoveListener() {
@@ -286,16 +240,12 @@ public class MainActivity extends AppCompatActivity {
                         }
                     }
                 });
-               //there is no geojsonsouce we use stylr url replace it.
-               // indoorBuildingSource = new GeoJsonSource("indoor-building", loadJsonFromAsset("white_house_lvl_0.geojson"));
-               // mapboxMap.addSource(indoorBuildingSource);
+                //there is no geojsonsouce we use stylr url replace it.
                 // show the ground floor  since we know zoom levels in range
                 map.setStyleUrl("mapbox://styles/lvyaw1225/cji7dfzx01e8v2sqygbr4xrto");
-                //addMarker();
-
-
             }
         });
+        //Setting up the floormap based on the level button click
         Button buttonSecondLevel = findViewById(R.id.second_level_button);
         buttonSecondLevel.setOnClickListener( new View.OnClickListener() {
             @Override
@@ -310,7 +260,6 @@ public class MainActivity extends AppCompatActivity {
                 map.setStyleUrl("mapbox://styles/lvyaw1225/cjisvanza56tv2rqo11ij53qn");
             }
         });
-
         Button buttonGroundLevel = findViewById(R.id.ground_level_button);
         buttonGroundLevel.setOnClickListener(new View.OnClickListener() {
             @Override
@@ -318,16 +267,13 @@ public class MainActivity extends AppCompatActivity {
                 map.setStyleUrl("mapbox://styles/lvyaw1225/cji7dfzx01e8v2sqygbr4xrto");
             }
         });
+        //Setting up different markers for different types (Source, Destination, flags)
         IconFactory iconFactory = IconFactory.getInstance(this);
         icon = iconFactory.fromResource(R.drawable.purple_marker);
         iconUsr = iconFactory.fromResource(R.drawable.usr_icon);
-
-
-
-
-
     }
 
+    //Async call to get the Destination point from the amazon Elastic Search to set the destination marker
     public class getDestination_Route extends AsyncTask<String, Void, String>{
 
         @Override
@@ -335,7 +281,6 @@ public class MainActivity extends AppCompatActivity {
             HttpURLConnection urlConnection = null;
             BufferedReader reader = null;
             String Url = "https://search-indoor-navigation-r2fy6yafkgybvrrhsgpcdev62e.us-east-2.es.amazonaws.com/fingerprint/routers/_search?q="+params[0]+"C&size=1";
-
             String destinationLocation = "";
             Uri uri = Uri.parse(Url).buildUpon().build();
             try {
@@ -344,7 +289,6 @@ public class MainActivity extends AppCompatActivity {
                 urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setRequestMethod("GET");
                 urlConnection.connect();
-
                 InputStream inputStream = urlConnection.getInputStream();
                 destinationLocation = readStream(inputStream);
                 try {
@@ -352,52 +296,41 @@ public class MainActivity extends AppCompatActivity {
                     destinationLocation = "";
                     String lat = result.getJSONObject("hits").getJSONArray("hits").getJSONObject(0).getJSONObject("_source").get("latitude1").toString();
                     String lon = result.getJSONObject("hits").getJSONArray("hits").getJSONObject(0).getJSONObject("_source").get("longitude1").toString();
-
                     destinationLocation = lat + "|" + lon;
-
-
-
-                } catch (JSONException e) {
+                }
+                catch (JSONException e) {
                     e.printStackTrace();
                 }
-
-
             } catch (IOException e) {
                 e.printStackTrace();
                 return null;
             }
-
-
-
             return destinationLocation;
         }
 
         @Override
         protected void onPostExecute(String result) {
-
             destinationMap[0] = result;
             String[] position = destinationMap[0].split("\\|");
             double lat = Double.parseDouble(position[0]);
             double lon = Double.parseDouble(position[1]);
             addDestination(lat, lon);
-
-
         }
-
     }
-
-    private void addDestination(double lat, double lon) {
-
+        //Setting up the destination
+        private void addDestination(double lat, double lon) {
         mLatLng = new LatLng(lat,lon);
         mMarker = new MarkerOptions()
                 .position(mLatLng)
                 .title("Location")
                 .snippet("Welcome to you");
         map.addMarker(mMarker);
+
+
     }
 
-    private void addMarker(double lat, double lon) {
-
+        //Adding the marker for the route flags.
+        private void addMarker(double lat, double lon) {
         mLatLng = new LatLng(lat,lon);
         mMarker = new MarkerOptions()
                 .position(mLatLng)
@@ -406,35 +339,33 @@ public class MainActivity extends AppCompatActivity {
                 .snippet("Welcome to you");
         map.addMarker(mMarker);
     }
+
+    //Update the user's position on the map
     private void addCurrentMarker(double lat, double lon) {
         mLatLng = new LatLng(lat, lon);
-            //map.removeMarker(marker_inter);
-        mMarker = new MarkerOptions()
-                .position(mLatLng)
-                .title("Location")
-                .setIcon(iconUsr)
-                .snippet("Welcome to you");
 
-       // map.addMarker(mMarker);
+        if(run==0) {
+            marker_inter = map.addMarker(new MarkerViewOptions()
+                    .position(mLatLng)
+                    .title("Intervention")
+                    .snippet("Desc inter")
+                    .icon(iconUsr));
+            run = 1;
+        }
+        else
+        {
+            map.removeMarker(marker_inter);
+            marker_inter = map.addMarker(new MarkerViewOptions()
+                    .position(mLatLng)
+                    .title("Intervention")
+                    .snippet("Desc inter")
+                    .icon(iconUsr));
+            run = 1;
 
-       // Marker updateMarker = new Marker(mMarker);
-
-
-        /*marker_inter = map.addMarker(new MarkerViewOptions()
-                .position(mLatLng)
-                .title("currentLocation")
-                .snippet("You are here!")
-                .icon(iconUsr));*/
-
-            map.addMarker(mMarker);
-
-            //map.removeMarker(mMarker.getMarker());
-            map.updateMarker(mMarker.getMarker());
+        }
 
     }
-
-
-
+    //Overriding the mapbox methods
     @Override
     protected void onResume() {
         super.onResume();
@@ -512,41 +443,32 @@ public class MainActivity extends AppCompatActivity {
         levelButtons.startAnimation(animation);
         levelButtons.setVisibility(View.VISIBLE);
     }
-
+    //Async function to post the router objects to the flask server to parse and return the predicted location
     public class FetchPredictedLocation extends AsyncTask<String, Void, String[]>{
         @Override
         protected String[] doInBackground(String... params) {
-
             HttpURLConnection urlConnection = null;
             BufferedReader reader = null;
             DataOutputStream writer;
-
             String predictedLocation = "";
-
             try {
                 URL url = new URL("http://ucdgps.ucd.ie");
-                //URL url = new URL("http://10.0.2.2:5000/");
-
-
                 urlConnection = (HttpURLConnection) url.openConnection();
                 urlConnection.setRequestMethod("GET");
                 urlConnection.setRequestProperty("Content-Type", "application/json");
                 urlConnection.setDoInput(true);
                 urlConnection.setDoOutput(true);
-
                 OutputStream stream = urlConnection.getOutputStream();
                 writer = new DataOutputStream(stream);
                 writer.writeBytes(params[0]);
                 writer.flush();
                 writer.close();
                 stream.close();
-
-
                 urlConnection.connect();
-
                 InputStream inputStream = urlConnection.getInputStream();
                 predictedLocation = readStream(inputStream);
                 String[] latitude = predictedLocation.split(",");
+                //Calling the marker to set the predicted location of the user
                 addCurrentMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
 
 
@@ -554,14 +476,11 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
                 return null;
             }
-
-
-
             return new String[0];
         }
 
     }
-
+    //Read the predicted location from the stream
     public String readStream(InputStream in) {
         BufferedReader reader = null;
         StringBuffer data = new StringBuffer("");
@@ -585,24 +504,13 @@ public class MainActivity extends AppCompatActivity {
         return data.toString();
     }
 
+    //Get the nearby router details
     public String getRouters(){
-
-       // arraylist.clear();
         wifi.startScan();
         results = wifi.getScanResults();
         size = results.size();
-        String routerDetails;
-        //JSONArray jsonArray = new JSONArray(results);
         String jsonRouter = new Gson().toJson(results);
-
         return jsonRouter;
     }
-
-
-
-
-
-
-
 
 }
