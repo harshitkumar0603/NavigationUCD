@@ -201,6 +201,9 @@ public class MainActivity extends AppCompatActivity {
         btnGetLocation.setOnClickListener(new View.OnClickListener() {
             public void onClick(View v) {
                 String routerDetails = getRouters();
+                if(run==1){
+                    map.removeMarker(marker_inter);
+                }
                 FetchPredictedLocation predictedLocation = new FetchPredictedLocation();
                 predictedLocation.execute(routerDetails);
             }
@@ -343,27 +346,12 @@ public class MainActivity extends AppCompatActivity {
     //Update the user's position on the map
     private void addCurrentMarker(double lat, double lon) {
         mLatLng = new LatLng(lat, lon);
-
-        if(run==0) {
-            marker_inter = map.addMarker(new MarkerViewOptions()
+        marker_inter = map.addMarker(new MarkerViewOptions()
                     .position(mLatLng)
                     .title("Intervention")
                     .snippet("Desc inter")
                     .icon(iconUsr));
-            run = 1;
-        }
-        else
-        {
-            map.removeMarker(marker_inter);
-            marker_inter = map.addMarker(new MarkerViewOptions()
-                    .position(mLatLng)
-                    .title("Intervention")
-                    .snippet("Desc inter")
-                    .icon(iconUsr));
-            run = 1;
-
-        }
-
+        run = 1;
     }
     //Overriding the mapbox methods
     @Override
@@ -470,9 +458,8 @@ public class MainActivity extends AppCompatActivity {
                 String[] latitude = predictedLocation.split(",");
                 //Calling the marker to set the predicted location of the user
                 addCurrentMarker(Double.parseDouble(latitude[0]),Double.parseDouble(latitude[1]));
-
-
-            } catch (IOException e) {
+            }
+            catch (IOException e) {
                 e.printStackTrace();
                 return null;
             }
